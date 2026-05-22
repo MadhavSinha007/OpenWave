@@ -48,8 +48,15 @@ download_song() {
 
 play_song() {
 
-    SONG=$(sqlite3 database/openwave.db \
-    "SELECT filepath FROM tracks ORDER BY id DESC LIMIT 1;")
+    SONG_DATA=$(sqlite3 database/openwave.db \
+    "SELECT id, filepath
+     FROM tracks
+     ORDER BY id DESC
+     LIMIT 1;")
+
+    TRACK_ID=$(echo "$SONG_DATA" | cut -d'|' -f1)
+
+    SONG=$(echo "$SONG_DATA" | cut -d'|' -f2)
 
     if [ -z "$SONG" ]; then
 
@@ -59,6 +66,10 @@ play_song() {
 
         exit 1
     fi
+
+    sqlite3 database/openwave.db \
+    "INSERT INTO listening_history (track_id)
+     VALUES ($TRACK_ID);"
 
     echo "$SONG" > player/current_track.txt
 
@@ -180,6 +191,15 @@ play_queue() {
     fi
 
     while IFS= read -r SONG; do
+
+        TRACK_ID=$(sqlite3 database/openwave.db \
+        "SELECT id FROM tracks
+         WHERE filepath='$SONG'
+         LIMIT 1;")
+
+        sqlite3 database/openwave.db \
+        "INSERT INTO listening_history (track_id)
+         VALUES ($TRACK_ID);"
 
         echo "$SONG" > player/current_track.txt
 
@@ -376,6 +396,69 @@ play_playlist() {
     play_queue
 }
 
+most_played() {
+
+    echo ""
+    echo "Most Played Songs"
+    echo "-----------------"
+
+    sqlite3 -column -header database/openwave.db \
+    "
+    SELECT tracks.title,
+           tracks.artist,
+           COUNT(listening_history.track_id) AS plays
+    FROM listening_history
+    JOIN tracks
+      ON tracks.id = listening_history.track_id
+    GROUP BY listening_history.track_id
+    ORDER BY plays DESC
+    LIMIT 10;
+    "
+
+    echo ""
+}
+
+recently_played() {
+
+    echo ""
+    echo "Recently Played"
+    echo "----------------"
+
+    sqlite3 -column -header database/openwave.db \
+    "
+    SELECT tracks.title,
+           tracks.artist,
+           listening_history.played_at
+    FROM listening_history
+    JOIN tracks
+      ON tracks.id = listening_history.track_id
+    ORDER BY listening_history.played_at DESC
+    LIMIT 10;
+    "
+
+    echo ""
+}
+
+recommend_artist() {
+
+    ARTIST="$*"
+
+    echo ""
+    echo "Recommendations"
+    echo "---------------"
+
+    sqlite3 -column -header database/openwave.db \
+    "
+    SELECT title,
+           artist
+    FROM tracks
+    WHERE artist LIKE '%$ARTIST%'
+    LIMIT 10;
+    "
+
+    echo ""
+}
+
 banner
 
 case "$COMMAND" in
@@ -494,6 +577,43 @@ case "$COMMAND" in
     previous)
 
         previous_song
+        ;;
+
+    recommend)
+
+        SUBCOMMAND=$2
+
+        case "$SUBCOMMAND" in
+
+            mostplayed)
+
+                most_played
+                ;;
+
+            recent)
+
+                recently_played
+                ;;
+
+            artist)
+
+                recommend_artist "${@:3}"
+                ;;
+
+            *)
+
+                echo ""
+                echo "Recommendation Commands"
+                echo "-----------------------"
+                echo ""
+
+                echo "./src/ow recommend mostplayed"
+                echo "./src/ow recommend recent"
+                echo './src/ow recommend artist "Hans Zimmer"'
+
+                echo ""
+                ;;
+        esac
         ;;
 
     playlist)
@@ -714,6 +834,10 @@ case "$COMMAND" in
 
         echo "./src/ow next"
         echo "./src/ow previous"
+
+        echo ""
+
+        echo "./src/ow recommend"
 
         echo ""
 
