@@ -10,6 +10,7 @@ LOG_DIR="$BASE_DIR/logs"
 
 mkdir -p "$DOWNLOAD_DIR"
 mkdir -p "$LOG_DIR"
+mkdir -p player
 
 banner() {
 
@@ -43,6 +44,74 @@ download_song() {
         -name "*.webp" -o \
         -name "*.m4a" \
     \) -delete
+}
+
+play_song() {
+
+    SONG=$(sqlite3 database/openwave.db \
+    "SELECT filepath FROM tracks ORDER BY id DESC LIMIT 1;")
+
+    if [ -z "$SONG" ]; then
+
+        echo ""
+        echo "No songs found in library."
+        echo ""
+
+        exit 1
+    fi
+
+    echo "$SONG" > player/current_track.txt
+
+    echo ""
+    echo "Now Playing:"
+    echo "$SONG"
+    echo ""
+
+    mpv --no-video "$SONG"
+}
+
+pause_song() {
+
+    pkill -STOP mpv
+
+    echo ""
+    echo "Playback paused."
+    echo ""
+}
+
+resume_song() {
+
+    pkill -CONT mpv
+
+    echo ""
+    echo "Playback resumed."
+    echo ""
+}
+
+stop_song() {
+
+    pkill mpv
+
+    echo ""
+    echo "Playback stopped."
+    echo ""
+}
+
+now_playing() {
+
+    if [ -f player/current_track.txt ]; then
+
+        echo ""
+        echo "Currently Playing:"
+        cat player/current_track.txt
+        echo ""
+
+    else
+
+        echo ""
+        echo "Nothing playing."
+        echo ""
+    fi
 }
 
 banner
@@ -81,6 +150,31 @@ case "$COMMAND" in
         echo ""
 
         download_song "ytsearch1:$QUERY"
+        ;;
+
+    play)
+
+        play_song
+        ;;
+
+    pause)
+
+        pause_song
+        ;;
+
+    resume)
+
+        resume_song
+        ;;
+
+    stop)
+
+        stop_song
+        ;;
+
+    nowplaying)
+
+        now_playing
         ;;
 
     library)
@@ -203,6 +297,17 @@ case "$COMMAND" in
 
         echo "./src/ow download <url>"
         echo './src/ow search "song name"'
+
+        echo ""
+
+        echo "./src/ow play"
+        echo "./src/ow pause"
+        echo "./src/ow resume"
+        echo "./src/ow stop"
+        echo "./src/ow nowplaying"
+
+        echo ""
+
         echo "./src/ow library"
 
         echo ""
