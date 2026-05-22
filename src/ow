@@ -580,6 +580,19 @@ case "$COMMAND" in
                 echo ""
                 ;;
 
+            normalize)
+
+                echo ""
+                echo "Normalizing metadata..."
+                echo ""
+
+                python3 scripts/normalize_metadata.py
+
+                echo ""
+                echo "Normalization complete."
+                echo ""
+                ;;
+
             list)
 
                 echo ""
@@ -662,6 +675,7 @@ case "$COMMAND" in
                 echo ""
 
                 echo "./src/ow library scan"
+                echo "./src/ow library normalize"
                 echo "./src/ow library list"
                 echo './src/ow library search "query"'
                 echo "./src/ow library count"
