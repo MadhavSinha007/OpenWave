@@ -229,6 +229,153 @@ previous_song() {
     mpv --no-video "$SONG"
 }
 
+create_playlist() {
+
+    NAME="$1"
+
+    if [ -z "$NAME" ]; then
+
+        echo ""
+        echo "Playlist name required."
+        echo ""
+
+        exit 1
+    fi
+
+    sqlite3 database/openwave.db \
+    "INSERT INTO playlists (name)
+     VALUES ('$NAME');"
+
+    echo ""
+    echo "Playlist created:"
+    echo "$NAME"
+    echo ""
+}
+
+list_playlists() {
+
+    echo ""
+    echo "Playlists"
+    echo "---------"
+
+    sqlite3 -column -header database/openwave.db \
+    "SELECT id, name FROM playlists;"
+
+    echo ""
+}
+
+delete_playlist() {
+
+    NAME="$1"
+
+    sqlite3 database/openwave.db \
+    "DELETE FROM playlists
+     WHERE name='$NAME';"
+
+    echo ""
+    echo "Playlist deleted:"
+    echo "$NAME"
+    echo ""
+}
+
+add_song_to_playlist() {
+
+    PLAYLIST="$1"
+
+    shift
+
+    QUERY="$*"
+
+    PLAYLIST_ID=$(sqlite3 database/openwave.db \
+    "SELECT id FROM playlists
+     WHERE name='$PLAYLIST';")
+
+    if [ -z "$PLAYLIST_ID" ]; then
+
+        echo ""
+        echo "Playlist not found."
+        echo ""
+
+        exit 1
+    fi
+
+    TRACK_ID=$(sqlite3 database/openwave.db \
+    "SELECT id FROM tracks
+     WHERE title LIKE '%$QUERY%'
+     LIMIT 1;")
+
+    if [ -z "$TRACK_ID" ]; then
+
+        echo ""
+        echo "Song not found."
+        echo ""
+
+        exit 1
+    fi
+
+    sqlite3 database/openwave.db \
+    "INSERT INTO playlist_tracks
+     (playlist_id, track_id)
+     VALUES ($PLAYLIST_ID, $TRACK_ID);"
+
+    echo ""
+    echo "Song added to playlist."
+    echo ""
+}
+
+show_playlist() {
+
+    NAME="$1"
+
+    echo ""
+    echo "Playlist: $NAME"
+    echo "----------------"
+
+    sqlite3 -column -header database/openwave.db \
+    "
+    SELECT tracks.id,
+           tracks.title,
+           tracks.artist
+    FROM tracks
+    JOIN playlist_tracks
+      ON tracks.id = playlist_tracks.track_id
+    JOIN playlists
+      ON playlists.id = playlist_tracks.playlist_id
+    WHERE playlists.name = '$NAME';
+    "
+
+    echo ""
+}
+
+play_playlist() {
+
+    NAME="$1"
+
+    SONGS=$(sqlite3 database/openwave.db \
+    "
+    SELECT tracks.filepath
+    FROM tracks
+    JOIN playlist_tracks
+      ON tracks.id = playlist_tracks.track_id
+    JOIN playlists
+      ON playlists.id = playlist_tracks.playlist_id
+    WHERE playlists.name = '$NAME';
+    ")
+
+    if [ -z "$SONGS" ]; then
+
+        echo ""
+        echo "Playlist is empty or missing."
+        echo ""
+
+        exit 1
+    fi
+
+    echo "$SONGS" > player/queue.txt
+
+    play_queue
+}
+
 banner
 
 case "$COMMAND" in
@@ -347,6 +494,68 @@ case "$COMMAND" in
     previous)
 
         previous_song
+        ;;
+
+    playlist)
+
+        SUBCOMMAND=$2
+
+        case "$SUBCOMMAND" in
+
+            create)
+
+                create_playlist "$3"
+                ;;
+
+            list)
+
+                list_playlists
+                ;;
+
+            delete)
+
+                delete_playlist "$3"
+                ;;
+
+            add)
+
+                PLAYLIST_NAME="$3"
+
+                add_song_to_playlist \
+                "$PLAYLIST_NAME" "${@:4}"
+                ;;
+
+            show)
+
+                show_playlist "$3"
+                ;;
+
+            play)
+
+                play_playlist "$3"
+                ;;
+
+            *)
+
+                echo ""
+                echo "Playlist Commands"
+                echo "-----------------"
+                echo ""
+
+                echo "./src/ow playlist create <name>"
+                echo "./src/ow playlist list"
+                echo "./src/ow playlist delete <name>"
+
+                echo ""
+
+                echo './src/ow playlist add chill "interstellar"'
+
+                echo "./src/ow playlist show <name>"
+                echo "./src/ow playlist play <name>"
+
+                echo ""
+                ;;
+        esac
         ;;
 
     library)
@@ -491,6 +700,10 @@ case "$COMMAND" in
 
         echo "./src/ow next"
         echo "./src/ow previous"
+
+        echo ""
+
+        echo "./src/ow playlist"
 
         echo ""
 
