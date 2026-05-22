@@ -1,0 +1,92 @@
+#!/bin/bash
+
+COMMAND=$1
+INPUT=$2
+
+BASE_DIR="$HOME/OpenWave"
+DOWNLOAD_DIR="$BASE_DIR/downloads"
+LOG_DIR="$BASE_DIR/logs"
+
+mkdir -p "$DOWNLOAD_DIR"
+mkdir -p "$LOG_DIR"
+
+banner() {
+    echo ""
+    echo "=================================="
+    echo "           OpenWave"
+    echo "=================================="
+    echo ""
+}
+
+download_song() {
+
+    TARGET="$1"
+
+    yt-dlp \
+        --extract-audio \
+        --audio-format mp3 \
+        --audio-quality 0 \
+        --embed-thumbnail \
+        --convert-thumbnails jpg \
+        --add-metadata \
+        --no-keep-video \
+        --restrict-filenames \
+        --newline \
+        -o "$DOWNLOAD_DIR/%(title)s.%(ext)s" \
+        "$TARGET"
+
+    find "$DOWNLOAD_DIR" -type f \( \
+        -name "*.webm" -o \
+        -name "*.jpg" -o \
+        -name "*.webp" -o \
+        -name "*.m4a" \
+    \) -delete
+}
+
+banner
+
+case "$COMMAND" in
+
+    download)
+
+        if [ -z "$INPUT" ]; then
+            echo "Usage:"
+            echo "ow download <youtube-url>"
+            exit 1
+        fi
+
+        echo "Downloading from URL..."
+        echo ""
+
+        download_song "$INPUT"
+        ;;
+
+    search)
+
+        if [ -z "$INPUT" ]; then
+            echo "Usage:"
+            echo 'ow search "song name"'
+            exit 1
+        fi
+
+        echo "Searching YouTube..."
+        echo ""
+
+        download_song "ytsearch1:$INPUT"
+        ;;
+
+    *)
+
+        echo "Commands:"
+        echo ""
+        echo "ow download <url>"
+        echo 'ow search "song name"'
+        echo ""
+        ;;
+esac
+
+echo ""
+echo "Saved in:"
+echo "$DOWNLOAD_DIR"
+echo ""
+
