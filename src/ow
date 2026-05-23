@@ -11,6 +11,7 @@ LOG_DIR="$BASE_DIR/logs"
 mkdir -p "$DOWNLOAD_DIR"
 mkdir -p "$LOG_DIR"
 mkdir -p player
+mkdir -p daemon
 
 banner() {
 
@@ -61,7 +62,7 @@ play_song() {
     if [ -z "$SONG" ]; then
 
         echo ""
-        echo "No songs found in library."
+        echo "No songs found."
         echo ""
 
         exit 1
@@ -71,19 +72,16 @@ play_song() {
     "INSERT INTO listening_history (track_id)
      VALUES ($TRACK_ID);"
 
-    echo "$SONG" > player/current_track.txt
+    echo "PLAY:$SONG" > daemon/command.txt
 
     echo ""
-    echo "Now Playing:"
-    echo "$SONG"
+    echo "Playback sent to daemon."
     echo ""
-
-    mpv --no-video "$SONG"
 }
 
 pause_song() {
 
-    pkill -STOP mpv
+    echo "PAUSE" > daemon/command.txt
 
     echo ""
     echo "Playback paused."
@@ -92,7 +90,7 @@ pause_song() {
 
 resume_song() {
 
-    pkill -CONT mpv
+    echo "RESUME" > daemon/command.txt
 
     echo ""
     echo "Playback resumed."
@@ -101,7 +99,7 @@ resume_song() {
 
 stop_song() {
 
-    pkill mpv
+    echo "STOP" > daemon/command.txt
 
     echo ""
     echo "Playback stopped."
