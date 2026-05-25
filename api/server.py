@@ -1,11 +1,54 @@
 from fastapi import FastAPI
+from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
+
+from fastapi.middleware.cors import CORSMiddleware
+
 import sqlite3
 import os
+import asyncio
+import json
+
+from pathlib import Path
 
 app = FastAPI()
 
-DB = "database/openwave.db"
+# =========================================
+# CORS
+# =========================================
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# =========================================
+# BASE PATHS
+# =========================================
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+DB_PATH = BASE_DIR / "database" / "openwave.db"
+
+DAEMON_DIR = BASE_DIR / "daemon"
+
+COMMAND_FILE = DAEMON_DIR / "command.txt"
+
+LIVE_STATE_FILE = DAEMON_DIR / "live_state.json"
+
+# =========================================
+# HELPERS
+# =========================================
+
+def get_connection():
+
+    return sqlite3.connect(DB_PATH)
+
+# =========================================
+# ROOT
+# =========================================
 
 @app.get("/")
 def home():
@@ -15,13 +58,17 @@ def home():
         "name": "OpenWave API",
 
         "status": "running"
+
     }
 
+# =========================================
+# SONGS
+# =========================================
 
 @app.get("/songs")
 def get_songs():
 
-    connection = sqlite3.connect(DB)
+    connection = get_connection()
 
     cursor = connection.cursor()
 
@@ -57,11 +104,14 @@ def get_songs():
 
     return results
 
+# =========================================
+# PLAYLISTS
+# =========================================
 
 @app.get("/playlists")
 def get_playlists():
 
-    connection = sqlite3.connect(DB)
+    connection = get_connection()
 
     cursor = connection.cursor()
 
@@ -92,11 +142,14 @@ def get_playlists():
 
     return results
 
+# =========================================
+# PLAY SONG
+# =========================================
 
 @app.post("/play/{track_id}")
 def play_song(track_id: int):
 
-    connection = sqlite3.connect(DB)
+    connection = get_connection()
 
     cursor = connection.cursor()
 
@@ -119,89 +172,90 @@ def play_song(track_id: int):
         return {
 
             "error": "Song not found"
+
         }
 
     filepath = song[0]
 
-    with open(
+    os.makedirs(DAEMON_DIR, exist_ok=True)
 
-        "daemon/command.txt",
-        "w"
+    with open(COMMAND_FILE, "w") as file:
 
-    ) as file:
-
-        file.write(
-
-            f"PLAY:{filepath}"
-
-        )
+        file.write(f"PLAY:{filepath}")
 
     return {
 
         "status": "playing",
 
         "song": filepath
+
     }
 
+# =========================================
+# PAUSE
+# =========================================
 
 @app.post("/pause")
 def pause_song():
 
-    with open(
+    os.makedirs(DAEMON_DIR, exist_ok=True)
 
-        "daemon/command.txt",
-        "w"
-
-    ) as file:
+    with open(COMMAND_FILE, "w") as file:
 
         file.write("PAUSE")
 
     return {
 
         "status": "paused"
+
     }
 
+# =========================================
+# RESUME
+# =========================================
 
 @app.post("/resume")
 def resume_song():
 
-    with open(
+    os.makedirs(DAEMON_DIR, exist_ok=True)
 
-        "daemon/command.txt",
-        "w"
-
-    ) as file:
+    with open(COMMAND_FILE, "w") as file:
 
         file.write("RESUME")
 
     return {
 
         "status": "resumed"
+
     }
 
+# =========================================
+# STOP
+# =========================================
 
 @app.post("/stop")
 def stop_song():
 
-    with open(
+    os.makedirs(DAEMON_DIR, exist_ok=True)
 
-        "daemon/command.txt",
-        "w"
-
-    ) as file:
+    with open(COMMAND_FILE, "w") as file:
 
         file.write("STOP")
 
     return {
 
         "status": "stopped"
+
     }
 
+# =========================================
+# RECOMMENDATIONS
+# =========================================
 
 @app.get("/recommend/mostplayed")
 def most_played():
 
-    connection = sqlite3.connect(DB)
+    connection = get_connection()
 
     cursor = connection.cursor()
 
@@ -244,3 +298,58 @@ def most_played():
         })
 
     return results
+
+# =========================================
+# WEBSOCKET
+# =========================================
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+
+    await websocket.accept()
+
+    print("Frontend connected")
+
+    try:
+
+        while True:
+
+            if LIVE_STATE_FILE.exists():
+
+                try:
+
+                    with open(LIVE_STATE_FILE, "r") as file:
+
+                        data = json.load(file)
+
+                except json.JSONDecodeError:
+
+                    data = {
+
+                        "status": "ERROR",
+
+                        "message": "Invalid live state"
+
+                    }
+
+            else:
+
+                data = {
+
+                    "status": "IDLE",
+
+                    "song": ""
+
+                }
+
+            await websocket.send_json(data)
+
+            await asyncio.sleep(1)
+
+    except WebSocketDisconnect:
+
+        print("Frontend disconnected")
+
+    except Exception as e:
+
+        print(f"WebSocket error: {e}")
