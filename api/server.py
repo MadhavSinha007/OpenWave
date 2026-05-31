@@ -3,6 +3,7 @@ from fastapi import WebSocket
 from fastapi import WebSocketDisconnect
 
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 import sqlite3
 import os
@@ -12,6 +13,16 @@ import json
 from pathlib import Path
 
 app = FastAPI()
+
+# =========================================
+# STATIC FILES (COVERS)
+# =========================================
+
+app.mount(
+    "/covers",
+    StaticFiles(directory="covers"),
+    name="covers"
+)
 
 # =========================================
 # CORS
@@ -24,8 +35,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # =========================================
-# BASE PATHS
+# PATHS
 # =========================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -39,7 +51,7 @@ COMMAND_FILE = DAEMON_DIR / "command.txt"
 LIVE_STATE_FILE = DAEMON_DIR / "live_state.json"
 
 # =========================================
-# HELPERS
+# DATABASE
 # =========================================
 
 def get_connection():
@@ -76,7 +88,8 @@ def get_songs():
 
     SELECT id,
            title,
-           artist
+           artist,
+           cover_path
 
     FROM tracks
 
@@ -98,52 +111,16 @@ def get_songs():
 
             "title": song[1],
 
-            "artist": song[2]
+            "artist": song[2],
+            
+            "cover": song[3]
 
         })
 
     return results
 
 # =========================================
-# PLAYLISTS
-# =========================================
-
-@app.get("/playlists")
-def get_playlists():
-
-    connection = get_connection()
-
-    cursor = connection.cursor()
-
-    cursor.execute("""
-
-    SELECT id,
-           name
-
-    FROM playlists
-
-    """)
-
-    playlists = cursor.fetchall()
-
-    connection.close()
-
-    results = []
-
-    for playlist in playlists:
-
-        results.append({
-
-            "id": playlist[0],
-
-            "name": playlist[1]
-
-        })
-
-    return results
-
-# =========================================
-# PLAY SONG
+# PLAY
 # =========================================
 
 @app.post("/play/{track_id}")
@@ -177,17 +154,13 @@ def play_song(track_id: int):
 
     filepath = song[0]
 
-    os.makedirs(DAEMON_DIR, exist_ok=True)
-
     with open(COMMAND_FILE, "w") as file:
 
         file.write(f"PLAY:{filepath}")
 
     return {
 
-        "status": "playing",
-
-        "song": filepath
+        "status": "playing"
 
     }
 
@@ -197,8 +170,6 @@ def play_song(track_id: int):
 
 @app.post("/pause")
 def pause_song():
-
-    os.makedirs(DAEMON_DIR, exist_ok=True)
 
     with open(COMMAND_FILE, "w") as file:
 
@@ -217,8 +188,6 @@ def pause_song():
 @app.post("/resume")
 def resume_song():
 
-    os.makedirs(DAEMON_DIR, exist_ok=True)
-
     with open(COMMAND_FILE, "w") as file:
 
         file.write("RESUME")
@@ -236,8 +205,6 @@ def resume_song():
 @app.post("/stop")
 def stop_song():
 
-    os.makedirs(DAEMON_DIR, exist_ok=True)
-
     with open(COMMAND_FILE, "w") as file:
 
         file.write("STOP")
@@ -249,55 +216,42 @@ def stop_song():
     }
 
 # =========================================
-# RECOMMENDATIONS
+# SEEK
 # =========================================
 
-@app.get("/recommend/mostplayed")
-def most_played():
+@app.post("/seek/{seconds}")
+def seek_track(seconds: int):
 
-    connection = get_connection()
+    with open(COMMAND_FILE, "w") as file:
 
-    cursor = connection.cursor()
+        file.write(f"SEEK:{seconds}")
 
-    cursor.execute("""
+    return {
 
-    SELECT tracks.title,
-           tracks.artist,
-           COUNT(listening_history.track_id) AS plays
+        "status": "seeking",
 
-    FROM listening_history
+        "seconds": seconds
 
-    JOIN tracks
+    }
 
-    ON tracks.id = listening_history.track_id
+# =========================================
+# VOLUME
+# =========================================
 
-    GROUP BY listening_history.track_id
+@app.post("/volume/{level}")
+def volume(level: int):
 
-    ORDER BY plays DESC
+    with open(COMMAND_FILE, "w") as file:
 
-    LIMIT 10
+        file.write(f"VOLUME:{level}")
 
-    """)
+    return {
 
-    rows = cursor.fetchall()
+        "status": "volume changed",
 
-    connection.close()
+        "volume": level
 
-    results = []
-
-    for row in rows:
-
-        results.append({
-
-            "title": row[0],
-
-            "artist": row[1],
-
-            "plays": row[2]
-
-        })
-
-    return results
+    }
 
 # =========================================
 # WEBSOCKET
@@ -308,37 +262,21 @@ async def websocket_endpoint(websocket: WebSocket):
 
     await websocket.accept()
 
-    print("Frontend connected")
-
     try:
 
         while True:
 
             if LIVE_STATE_FILE.exists():
 
-                try:
+                with open(LIVE_STATE_FILE, "r") as file:
 
-                    with open(LIVE_STATE_FILE, "r") as file:
-
-                        data = json.load(file)
-
-                except json.JSONDecodeError:
-
-                    data = {
-
-                        "status": "ERROR",
-
-                        "message": "Invalid live state"
-
-                    }
+                    data = json.load(file)
 
             else:
 
                 data = {
 
-                    "status": "IDLE",
-
-                    "song": ""
+                    "status": "IDLE"
 
                 }
 
@@ -349,7 +287,3 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
 
         print("Frontend disconnected")
-
-    except Exception as e:
-
-        print(f"WebSocket error: {e}")
