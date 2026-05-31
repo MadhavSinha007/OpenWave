@@ -80,21 +80,19 @@ def home():
 @app.get("/songs")
 def get_songs():
 
-    connection = get_connection()
+    connection = sqlite3.connect(DB_PATH)
 
     cursor = connection.cursor()
 
     cursor.execute("""
-
-    SELECT id,
-           title,
-           artist,
-           cover_path
-
+    SELECT
+        id,
+        title,
+        artist,
+        cover_path,
+        filepath
     FROM tracks
-
     ORDER BY id DESC
-
     """)
 
     songs = cursor.fetchall()
@@ -113,7 +111,9 @@ def get_songs():
 
             "artist": song[2],
             
-            "cover": song[3]
+            "cover": song[3],
+
+            "filepath": song[4]
 
         })
 
