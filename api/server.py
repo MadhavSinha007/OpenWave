@@ -254,7 +254,7 @@ def volume(level: int):
     }
 
 # =========================================
-# WEBSOCKET
+# WEBSOCKET - FIXED with 0.2s updates
 # =========================================
 
 @app.websocket("/ws")
@@ -282,7 +282,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             await websocket.send_json(data)
 
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.2)  # FIXED: Changed from 1 to 0.2 for smoother updates
 
     except WebSocketDisconnect:
 
